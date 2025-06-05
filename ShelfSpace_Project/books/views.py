@@ -125,7 +125,7 @@ def rate_book(request, unique_token):
 
 
 genai.configure(api_key=settings.GEM_MODEL)
-model = genai.GenerativeModel("gemini-pro")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 @login_required
 def ask_me_anything(request):
