@@ -10,7 +10,34 @@ from django.db.models import Count
 
 from django.shortcuts import render
 from django.conf import settings
-import google.generativeai as genai
+from google import genai
+from google.genai import errors as genai_errors
+import logging
+
+logger = logging.getLogger(__name__)
+GENAI_MODEL_NAME = "gemini-2.5-flash-lite"
+
+
+def _generate_ai_text(input_question):
+    try:
+        client = genai.Client(api_key=settings.GEM_MODEL)
+        response = client.models.generate_content(
+            model=GENAI_MODEL_NAME,
+            contents=input_question,
+        )
+        if response and getattr(response, "text", None):
+            return response.text
+        return "No response received from the AI service."
+    except genai_errors.APIError as error:
+        status_code = getattr(error, "status_code", None) or getattr(error, "code", None)
+        if status_code == 429:
+            logger.warning("Gemini quota exceeded: %s", error)
+            return "Gemini is currently rate-limited. Please try again in a few moments."
+        logger.exception("Gemini request failed.")
+        return "Unable to process your request right now. Please try again later."
+    except Exception as error:
+        logger.exception("Gemini request failed.")
+        return "Unable to process your request right now. Please try again later."
 
 @login_required
 def book_list(request):
@@ -124,21 +151,18 @@ def rate_book(request, unique_token):
 
 
 
-genai.configure(api_key=settings.GEM_MODEL)
-model = genai.GenerativeModel("gemini-2.0-flash")
-
 @login_required
 def ask_me_anything(request):
     if request.method == 'POST':
         input_question = request.POST.get('input_question', '')  
-        response = model.generate_content(input_question)
-        return render(request, 'books/gemini.html', {'response': response.text})
+        response_text = _generate_ai_text(input_question)
+        return render(request, 'books/gemini.html', {'response': response_text})
     return render(request, 'books/gemini.html', {})
 
 @login_required
 def recommend(request):
     if request.method == 'POST':
         input_question = request.POST.get('input_question', '') + "\n\nOnly Type the Book Name and Author. Not Any other thing"
-        response = model.generate_content(input_question)
-        return render(request, 'books/recommender.html', {'response': response.text})
+        response_text = _generate_ai_text(input_question)
+        return render(request, 'books/recommender.html', {'response': response_text})
     return render(request, 'books/recommender.html', {})
